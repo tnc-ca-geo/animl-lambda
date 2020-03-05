@@ -59,7 +59,7 @@ Navigate to the AWS Lambda console to add the s3 ObjectCreated trigger for s3://
 To update and repackage the python dependences, you'll need to spin up a docker container to emulate the amazon linux 
 environment and install the packages there. 
 
-1. Build and run docker container in interactive mode to emulate lambda (only need to build once)
+1. Build* and run docker container in interactive mode to emulate lambda
 
 ```sh
 docker build -t animl/lambda .
@@ -73,6 +73,13 @@ in a directory of the same name.
 The ```-it``` flag means you get to interact with this container on launch.
 The ```--rm``` flag means Docker will remove the container when you’re finished.
 ```animl/lambda`` is the name of the container image.
+
+* you only need to the Docker container once. To check if it already exists, run the following and look for the ```animl/lambda``` image:
+
+```sh
+docker images
+```
+
 
 2. Create and activate virtual env within the container
 
