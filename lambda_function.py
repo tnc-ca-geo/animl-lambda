@@ -2,6 +2,7 @@
 
 import imageio
 import boto3
+import requests
 import os
 import sys
 import uuid
@@ -9,7 +10,7 @@ import subprocess
 from urllib.parse import unquote_plus
 import json
 
-
+ANIML_IMG_API = "https://9e6dd2be.ngrok.io/api/v1/images"
 S3_EXTERNAL_DEPS  = "animl-dependencies"
 S3_IMAGES_BUCKET  = "animl-images"
 FIELDS_TO_KEEP    = {
@@ -32,6 +33,11 @@ s3.download_file(
     '/tmp/Image-ExifTool-11.89.tar.gz')
 p = subprocess.run('tar -zxf Image-ExifTool-11.89.tar.gz', cwd='/tmp', shell=True)
 
+
+def make_request(exif_data):
+    r = requests.post(ANIML_IMG_API, json=exif_data)
+    print(r.status_code)
+    print(r.json())
 
 def filter_std_fields(exif_data, ftk):
     ret = {}
@@ -84,3 +90,5 @@ def handler(event, context):
         exif_data_all = get_meta_data(download_path)
         exif_data_filtered = filter_exif(exif_data_all)
         print('filtered exif: {}'.format(exif_data_filtered))
+        make_request(exif_data_filtered)
+        
