@@ -1,9 +1,11 @@
 # animl-lambda
 Lambda function for processing camera trap images.
 
-This is part of a larger camera trap data processing and managment pipeline; see:
-
-https://github.com/tnc-ca-geo/animl
+## Related repos
+- Animl base program      http://github.com/tnc-ca-geo/animl-base
+- Animl ML resources      http://github.com/tnc-ca-geo/animl-ml
+- Animl desktop app       https://github.com/tnc-ca-geo/animl-desktop
+- Animl cloud platform    https://github.com/tnc-ca-geo/animl
 
 ## About
 The function is written in python and intended for a python 3.6 lambda runtime.
