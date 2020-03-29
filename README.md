@@ -67,19 +67,19 @@ container to emulate the amazon linux environment and install the packages there
 image after running the following command, skip to step 3:
 
 ```sh
-docker images
+$ docker images
 ```
 
 2. Build docker container to emulate lambda
 
 ```sh
-docker build -t animl/lambda .
+$ docker build -t animl/lambda .
 ```
 
 3. Run docker container in interactive mode to emulate lambda
 
 ```sh
-docker run --rm -v $(pwd)/output:/output -it animl/lambda
+$ docker run --rm -v $(pwd)/output:/output -it animl/lambda
 ```
 
 Note:
@@ -94,31 +94,31 @@ The ```--rm``` flag means Docker will remove the container when you’re finishe
 3. Create and activate virtual env within the container
 
 ```sh
-cd output/
-python3.6 -m venv --copies env
-source env/bin/activate
+$ cd output/
+$ python3.6 -m venv --copies env
+$ source env/bin/activate
 ```
 
 4. Install dependencies
 
 ```sh
-pip3.6 install --upgrade pip wheel
-pip3.6 install --no-binary imageio imageio
-pip3.6 install --no-binary requests requests
+$ pip3.6 install --upgrade pip wheel
+$ pip3.6 install --no-binary imageio imageio
+$ pip3.6 install --no-binary requests requests
 ```
 
 5. Strip out unnecessary files and zip up the site packages
 
 ```sh
-base_dir="/output"
-find $VIRTUAL_ENV/lib/python3.6/site-packages/ -name "*.so" | xargs strip
-pushd $VIRTUAL_ENV/lib/python3.6/site-packages/ && zip -r -9 -q $base_dir/venv.zip * ; popd
+$ base_dir="/output"
+$ find $VIRTUAL_ENV/lib/python3.6/site-packages/ -name "*.so" | xargs strip
+$ pushd $VIRTUAL_ENV/lib/python3.6/site-packages/ && zip -r -9 -q $base_dir/venv.zip * ; popd
 ```
 
 6. Exit out of docker container
 
 ```sh
-deactivate
+$ deactivate
 ```
 Ctrl+D to exit docker.
 
@@ -129,15 +129,15 @@ You will now have access to the zipped dependencies in ```output/venv.zip```
 1. Add the function code to the zip file
 
 ```sh
-rm function.zip
-cp output/venv.zip function.zip
-zip -u function.zip lambda_function.py
+$ rm function.zip
+$ cp output/venv.zip function.zip
+$ zip -u function.zip lambda_function.py
 ```
 
 2. Updload to AWS
 
 ```sh
-aws-vault exec home -- aws lambda update-function-code --function-name ProcessCamtrapImage \
+$ aws-vault exec home -- aws lambda update-function-code --function-name ProcessCamtrapImage \
 --zip-file fileb://function.zip
 ```
 
