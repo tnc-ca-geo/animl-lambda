@@ -1,6 +1,8 @@
 #!/opt/bin/perl
 
-import imageio
+from PIL import Image, ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+# import imageio
 import boto3
 import requests
 import os
@@ -9,14 +11,16 @@ import uuid
 import subprocess
 from urllib.parse import unquote_plus
 import json
+import hashlib
+
 
 ANIML_IMG_API = "https://df2878f8.ngrok.io/api/v1/images/save"
 S3_EXTERNAL_DEPS  = "animl-dependencies"
 S3_IMAGES_BUCKET  = "animl-images"
 
-s3 = boto3.client('s3')
 
 # fetch exif tool from s3 bucket
+s3 = boto3.client('s3')
 s3.download_file(
     S3_EXTERNAL_DEPS,
     'Image-ExifTool-11.89.tar.gz', 
@@ -41,13 +45,23 @@ def get_exif_data(img_path):
     print('error: ', err)
     return json.loads(out)[0]
 
+def hash(img_path):
+    print('Hashing image')
+    image = Image.open(img_path)
+    img_hash = hashlib.md5(image.tobytes()).hexdigest()
+    return img_hash
+
 def handler(event, context):
     for record in event['Records']:
         key = unquote_plus(record['s3']['object']['key'])
+        print('Key: ', key)
         tmpkey = key.replace('/', '')
         tmp_path = '/tmp/{}{}'.format(uuid.uuid4(), tmpkey)
         s3.download_file(S3_IMAGES_BUCKET, key, tmp_path)
+        img_hash = hash(tmp_path)
+        print('Hash: {}'.format(img_hash))
         meta_data = get_exif_data(tmp_path)
         meta_data['key'] = key
         meta_data['bucket'] = record['s3']['bucket']['name']
+        print('Metadata: {}'.format(meta_data))
         make_request(meta_data)

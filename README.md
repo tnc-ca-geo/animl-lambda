@@ -81,7 +81,7 @@ $ docker build -t animl/lambda .
 3. Run docker container in interactive mode to emulate lambda
 
 ```sh
-$ docker run --rm -v $(pwd)/output:/output -it animl/lambda
+$ docker run --rm -v $(pwd)/output:/output -it animl/lambda bash
 ```
 
 Note:
@@ -105,7 +105,8 @@ $ source env/bin/activate
 
 ```sh
 $ pip3.6 install --upgrade pip wheel
-$ pip3.6 install --no-binary imageio imageio
+# $ pip3.6 install --no-binary imageio imageio
+$ pip3.6 install --no-binary pillow pillow
 $ pip3.6 install --no-binary requests requests
 ```
 
