@@ -15,9 +15,11 @@ import json
 import hashlib
 
 
-ANIML_IMG_API = "https://df2878f8.ngrok.io/api/v1/images/save"
-S3_EXTERNAL_DEPS  = "animl-dependencies"
-S3_IMAGES_BUCKET  = "animl-images"
+ANIML_IMG_API = 'https://df2878f8.ngrok.io/api/v1/images/save'
+S3_EXTERNAL_DEPS  = 'animl-dependencies'
+ARCHIVE_BUCKET = 'animl-data-archive'
+PROD_BUCKET = 'animl-data-production'
+SUPPORTED_FILE_TYPES = ['.jpg', '.png']
 
 
 # fetch exif tool from s3 bucket
@@ -34,6 +36,49 @@ def make_request(exif_data):
     print(r.status_code)
     # print(r.json())
 
+def transfer(md, archive_dest=ARCHIVE_BUCKET, prod_dest=PROD_BUCKET):
+    copy_source = { 'Bucket': md['Bucket'], 'Key': md['Key'] }
+    print('Transferring {} to {}'.format(md['FileName'], archive_dest))
+    sn = 'unknown'
+    if 'SerialNumber' in md:
+        sn = md['SerialNumber']
+    archive_key = os.path.join(sn, md['FileName'], md['Hash'])
+    s3.copy(copy_source, archive_dest, archive_key)
+    print('Transferring {} to {}'.format(md['FileName'], prod_dest))
+    prod_key = md['Hash']
+    s3.copy(copy_source, prod_dest, prod_key)
+
+def hash(img_path):
+    image = Image.open(img_path)
+    img_hash = hashlib.md5(image.tobytes()).hexdigest()
+    return img_hash
+
+def parse_bec_comment_field(exif_data):
+    """
+    BuckEyeCams nest their serial numbers in its 'comment' field
+    which is a long string, so we need to parse it
+    """
+    ret = {}
+    comment = exif_data['Comment'].splitlines()
+    for item in comment:
+        if 'SN=' in item:
+            ret['SerialNumber'] = item.split('=')[1]
+        elif 'TEXT1=' in item:
+            ret['text_1'] = item.split('=')[1]
+        elif 'TEXT2=' in item:
+            ret['text_2'] = item.split('=')[1]
+    return ret
+
+def enrich_meta_data(md, exif_data):
+    if ('Make' in exif_data) and (exif_data['Make'] == 'BuckEyeCam'):
+      comment_field = parse_bec_comment_field(exif_data)
+      exif_data.update(comment_field)
+    md['Hash'] = hash(exif_data['SourceFile'])
+    exif_data.update(md)
+    md = exif_data
+    print('Metadata: {}'.format(md))
+    return md
+
 def get_exif_data(img_path):
     command = '/tmp/Image-ExifTool-11.89/exiftool -json ' + img_path
     p = subprocess.Popen(
@@ -42,31 +87,40 @@ def get_exif_data(img_path):
         stderr=subprocess.PIPE,
         shell=True)
     out, err = p.communicate()
-    print('successfully extracted exif data: ', out)
-    print('error: ', err)
+    print('Successfully extracted exif data: ', out)
+    if err:
+        print('error: ', err)
     return json.loads(out)[0]
 
-def hash(img_path):
-    print('Hashing image')
-    # todo: add error handling if object is not an image file
-    image = Image.open(img_path)
-    img_hash = hashlib.md5(image.tobytes()).hexdigest()
-    return img_hash
+def download(bucket, key):
+    print('Downloading {}'.format(key))
+    tmpkey = key.replace('/', '')
+    tmpkey = tmpkey.replace(' ', '_')
+    tmp_path = '/tmp/{}{}'.format(uuid.uuid4(), tmpkey)
+    s3.download_file(bucket, key, tmp_path)
+    return tmp_path
+
+def validate(file_name):
+    ext = os.path.splitext(file_name)
+    if ext[1].lower() not in SUPPORTED_FILE_TYPES:
+        return False
+    return True
 
 def handler(event, context):
     for record in event['Records']:
-        key = unquote_plus(record['s3']['object']['key'])
-        file_name = ntpath.basename(key)
-        print('Key: ', key)
-        print('File name: ', file_name)
-        tmpkey = key.replace('/', '')
-        tmpkey = tmpkey.replace(' ', '_')
-        tmp_path = '/tmp/{}{}'.format(uuid.uuid4(), tmpkey)
-        s3.download_file(S3_IMAGES_BUCKET, key, tmp_path)
-        img_hash = hash(tmp_path)
-        print('Hash: {}'.format(img_hash))
-        meta_data = get_exif_data(tmp_path)
-        meta_data['key'] = key
-        meta_data['bucket'] = record['s3']['bucket']['name']
-        print('Metadata: {}'.format(meta_data))
-        make_request(meta_data)
+        md = {
+          'Bucket': record['s3']['bucket']['name'],
+          'Key': unquote_plus(record['s3']['object']['key']),
+        }
+        print('New file detected in {}: {}'.format(md['Bucket'], md['Key']))
+        md['FileName'] = ntpath.basename(md['Key'])
+        if validate(md['FileName']):
+            tmp_path = download(md['Bucket'], md['Key'])
+            exif_data = get_exif_data(tmp_path)
+            md = enrich_meta_data(md, exif_data)
+            transfer(md)
+            make_request(md)
+        else:
+            print('{} is not a supported file type'.format(md['FileName']))
+        print('Deleting {} from {}'.format(md['Key'], md['Bucket']))
+        s3.delete_object(Bucket=md['Bucket'], Key=md['Key'])
