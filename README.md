@@ -127,21 +127,10 @@ Ctrl+D to exit docker.
 
 You will now have access to the zipped dependencies in ```output/venv.zip```
 
-### Update the function and upload to AWS
+### Update the function and deploy to AWS
 
-1. Add the function code to the zip file
-
-```sh
-$ rm function.zip
-$ cp output/venv.zip function.zip
-$ zip -u function.zip lambda_function.py
 ```
-
-2. Updload to AWS
-
-```sh
-$ aws-vault exec home -- aws lambda update-function-code --function-name ProcessCamtrapImage \
---zip-file fileb://function.zip
+$ bash scripts/deploy.sh
 ```
 
 ### Testing

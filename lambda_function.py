@@ -9,6 +9,7 @@ import os
 import sys
 import uuid
 import subprocess
+import ntpath
 from urllib.parse import unquote_plus
 import json
 import hashlib
@@ -47,6 +48,7 @@ def get_exif_data(img_path):
 
 def hash(img_path):
     print('Hashing image')
+    # todo: add error handling if object is not an image file
     image = Image.open(img_path)
     img_hash = hashlib.md5(image.tobytes()).hexdigest()
     return img_hash
@@ -54,8 +56,11 @@ def hash(img_path):
 def handler(event, context):
     for record in event['Records']:
         key = unquote_plus(record['s3']['object']['key'])
+        file_name = ntpath.basename(key)
         print('Key: ', key)
+        print('File name: ', file_name)
         tmpkey = key.replace('/', '')
+        tmpkey = tmpkey.replace(' ', '_')
         tmp_path = '/tmp/{}{}'.format(uuid.uuid4(), tmpkey)
         s3.download_file(S3_IMAGES_BUCKET, key, tmp_path)
         img_hash = hash(tmp_path)
