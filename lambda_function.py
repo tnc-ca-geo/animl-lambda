@@ -23,15 +23,7 @@ PROD_DIR_IMGS = 'images'
 PROD_DIR_THUMB = 'thumbnails'
 SUPPORTED_FILE_TYPES = ['.jpg', '.png']
 THUMB_SIZE = (120, 120)
-
-
-# fetch exif tool from s3 bucket
 s3 = boto3.client('s3')
-s3.download_file(
-    S3_EXTERNAL_DEPS,
-    'Image-ExifTool-11.89.tar.gz', 
-    '/tmp/Image-ExifTool-11.89.tar.gz')
-p = subprocess.run('tar -zxf Image-ExifTool-11.89.tar.gz', cwd='/tmp', shell=True)
 
 
 def make_request(exif_data):
@@ -41,13 +33,13 @@ def make_request(exif_data):
 
 def create_thumbnail(md, size=THUMB_SIZE, bkt=PROD_BUCKET, dir=PROD_DIR_THUMB):
     print('Creating thumbnail')
-    thumb_filename = '{}-small'.format(md['Hash'])
+    thumb_filename = 'resized-{}'.format(md['FileName'])
     tmp_path_thumb = os.path.join('/tmp', thumb_filename)
     with Image.open(md['SourceFile']) as image:
         image.thumbnail(size)
         image.save(tmp_path_thumb)
     print('Transferring {} to {}'.format(thumb_filename, bkt))
-    thumb_key = os.path.join(dir, thumb_filename)
+    thumb_key = os.path.join(dir, '{}-small'.format(md['Hash']))
     s3.upload_file(tmp_path_thumb, bkt, thumb_key)
 
 def copy_to_dest(md, archive_bkt=ARCHIVE_BUCKET, prod_bkt=PROD_BUCKET):
@@ -94,7 +86,7 @@ def enrich_meta_data(md, exif_data):
     return md
 
 def get_exif_data(img_path):
-    command = '/tmp/Image-ExifTool-11.89/exiftool -json ' + img_path
+    command = 'Image-ExifTool-12.01/exiftool -json ' + img_path
     p = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,

@@ -119,6 +119,14 @@ $ find $VIRTUAL_ENV/lib/python3.6/site-packages/ -name "*.so" | xargs strip
 $ pushd $VIRTUAL_ENV/lib/python3.6/site-packages/ && zip -r -9 -q $base_dir/venv.zip * ; popd
 ```
 
+6. Download exiftool executable and add to zip
+
+```sh
+$ curl -o Image-ExifTool-12.01.tar.gz https://exiftool.org/Image-ExifTool-12.01.tar.gz
+$ tar -zxf Image-ExifTool-12.01.tar.gz
+$ zip -g -r venv.zip Image-ExifTool-12.01
+```
+
 6. Exit out of docker container
 
 ```sh
@@ -136,5 +144,5 @@ $ bash scripts/deploy.sh
 
 ### Testing
 
-1. Upload an image to s3://animl-images
+1. Upload an image to s3://animl-data-staging
 2. View logged output in AWS Cloudwatch
