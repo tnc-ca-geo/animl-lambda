@@ -63,7 +63,8 @@ s3://animl-images (not sure how to do this from the aws lambda cli).
 
 ### Update the function's dependencies
 To update and repackage the python dependences, you'll need to spin up a docker 
-container to emulate the amazon linux environment and install the packages there. 
+container to emulate the amazon linux environment and install the packages 
+there. 
 
 1. Check if the docker container exists. If you see the ```animl/lambda``` 
 image after running the following command, skip to step 3:

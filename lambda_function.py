@@ -41,7 +41,7 @@ def make_request(exif_data):
 
 def create_thumbnail(md, size=THUMB_SIZE, bkt=PROD_BUCKET, dir=PROD_DIR_THUMB):
     print('Creating thumbnail')
-    thumb_filename = 'resized-{}'.format(md['FileName'])
+    thumb_filename = '{}-small'.format(md['Hash'])
     tmp_path_thumb = os.path.join('/tmp', thumb_filename)
     with Image.open(md['SourceFile']) as image:
         image.thumbnail(size)
