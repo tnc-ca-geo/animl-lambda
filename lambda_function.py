@@ -19,7 +19,10 @@ ANIML_IMG_API = 'https://df2878f8.ngrok.io/api/v1/images/save'
 S3_EXTERNAL_DEPS  = 'animl-dependencies'
 ARCHIVE_BUCKET = 'animl-data-archive'
 PROD_BUCKET = 'animl-data-production'
+PROD_DIR_IMGS = 'images'
+PROD_DIR_THUMB = 'thumbnails'
 SUPPORTED_FILE_TYPES = ['.jpg', '.png']
+THUMB_SIZE = (120, 120)
 
 
 # fetch exif tool from s3 bucket
@@ -36,17 +39,28 @@ def make_request(exif_data):
     print(r.status_code)
     # print(r.json())
 
-def transfer(md, archive_dest=ARCHIVE_BUCKET, prod_dest=PROD_BUCKET):
+def create_thumbnail(md, size=THUMB_SIZE, bkt=PROD_BUCKET, dir=PROD_DIR_THUMB):
+    print('Creating thumbnail')
+    thumb_filename = 'resized-{}'.format(md['FileName'])
+    tmp_path_thumb = os.path.join('/tmp', thumb_filename)
+    with Image.open(md['SourceFile']) as image:
+        image.thumbnail(size)
+        image.save(tmp_path_thumb)
+    print('Transferring {} to {}'.format(thumb_filename, bkt))
+    thumb_key = os.path.join(dir, thumb_filename)
+    s3.upload_file(tmp_path_thumb, bkt, thumb_key)
+
+def copy_to_dest(md, archive_bkt=ARCHIVE_BUCKET, prod_bkt=PROD_BUCKET):
     copy_source = { 'Bucket': md['Bucket'], 'Key': md['Key'] }
-    print('Transferring {} to {}'.format(md['FileName'], archive_dest))
-    sn = 'unknown'
+    print('Transferring {} to {}'.format(md['FileName'], archive_bkt))
+    sn = 'unknown-camera'
     if 'SerialNumber' in md:
         sn = md['SerialNumber']
     archive_key = os.path.join(sn, md['FileName'], md['Hash'])
-    s3.copy(copy_source, archive_dest, archive_key)
-    print('Transferring {} to {}'.format(md['FileName'], prod_dest))
-    prod_key = md['Hash']
-    s3.copy(copy_source, prod_dest, prod_key)
+    s3.copy(copy_source, archive_bkt, archive_key)
+    print('Transferring {} to {}'.format(md['FileName'], prod_bkt))
+    prod_key = os.path.join(PROD_DIR_IMGS, md['Hash'])
+    s3.copy(copy_source, prod_bkt, prod_key)
 
 def hash(img_path):
     image = Image.open(img_path)
@@ -118,7 +132,8 @@ def handler(event, context):
             tmp_path = download(md['Bucket'], md['Key'])
             exif_data = get_exif_data(tmp_path)
             md = enrich_meta_data(md, exif_data)
-            transfer(md)
+            copy_to_dest(md)
+            create_thumbnail(md)
             make_request(md)
         else:
             print('{} is not a supported file type'.format(md['FileName']))
