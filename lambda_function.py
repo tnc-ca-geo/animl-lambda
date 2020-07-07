@@ -2,7 +2,6 @@
 
 from PIL import Image, ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
-# import imageio
 import boto3
 import requests
 import os
@@ -13,14 +12,15 @@ import ntpath
 from urllib.parse import unquote_plus
 import json
 import hashlib
+import exiftool
 
 
 ANIML_IMG_API = 'https://df2878f8.ngrok.io/api/v1/images/save'
-S3_EXTERNAL_DEPS  = 'animl-dependencies'
 ARCHIVE_BUCKET = 'animl-data-archive'
 PROD_BUCKET = 'animl-data-production'
 PROD_DIR_IMGS = 'images'
 PROD_DIR_THUMB = 'thumbnails'
+EXIFTOOL_PATH = '{}/exiftool'.format(os.environ['LAMBDA_TASK_ROOT'])
 SUPPORTED_FILE_TYPES = ['.jpg', '.png']
 THUMB_SIZE = (120, 120)
 s3 = boto3.client('s3')
@@ -81,8 +81,8 @@ def parse_bec_comment_field(exif_data):
 
 def enrich_meta_data(md, exif_data):
     if ('Make' in exif_data) and (exif_data['Make'] == 'BuckEyeCam'):
-      comment_field = parse_bec_comment_field(exif_data)
-      exif_data.update(comment_field)
+        comment_field = parse_bec_comment_field(exif_data)
+        exif_data.update(comment_field)
     md['Hash'] = hash(exif_data['SourceFile'])
     exif_data.update(md)
     md = exif_data
@@ -90,17 +90,15 @@ def enrich_meta_data(md, exif_data):
     return md
 
 def get_exif_data(img_path):
-    command = 'Image-ExifTool-12.01/exiftool -json ' + img_path
-    p = subprocess.Popen(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        shell=True)
-    out, err = p.communicate()
-    print('Successfully extracted exif data: ', out)
-    if err:
-        print('error: ', err)
-    return json.loads(out)[0]
+    os.environ['PATH'] = '{}:{}/'.format(os.environ['PATH'], EXIFTOOL_PATH)
+    with exiftool.ExifTool() as et:
+        ret = {}
+        exif_data = et.get_metadata(img_path)
+        # remove 'group names' from keys/exif-tags
+        for key, value in exif_data.items():
+            new_key = key if (':' not in key) else key.split(':')[1]
+            ret[new_key] = value
+        return ret
 
 def download(bucket, key):
     print('Downloading {}'.format(key))

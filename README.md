@@ -102,29 +102,33 @@ $ python3.6 -m venv --copies env
 $ source env/bin/activate
 ```
 
+6. Download exiftool and copy its executable and dependencies into 
+`/output/exiftool/`
+
+```sh
+$ curl -o Image-ExifTool-12.01.tar.gz https://exiftool.org/Image-ExifTool-12.01.tar.gz
+$ tar -zxf Image-ExifTool-12.01.tar.gz
+$ mkdir exiftool
+$ cp Image-ExifTool-12.01/exiftool exiftool/
+$ cp -r Image-ExifTool-12.01/lib exiftool/
+```
+
 4. Install dependencies
 
 ```sh
 $ pip3.6 install --upgrade pip wheel
-# $ pip3.6 install --no-binary imageio imageio
 $ pip3.6 install --no-binary pillow pillow
 $ pip3.6 install --no-binary requests requests
+$ pip3.6 install --no-binary PyExifTool PyExifTool
 ```
 
-5. Strip out unnecessary files and zip up the site packages
+5. Strip out unnecessary files and zip up the site packages & exiftool executable
 
 ```sh
 $ base_dir="/output"
 $ find $VIRTUAL_ENV/lib/python3.6/site-packages/ -name "*.so" | xargs strip
 $ pushd $VIRTUAL_ENV/lib/python3.6/site-packages/ && zip -r -9 -q $base_dir/venv.zip * ; popd
-```
-
-6. Download exiftool executable and add to zip
-
-```sh
-$ curl -o Image-ExifTool-12.01.tar.gz https://exiftool.org/Image-ExifTool-12.01.tar.gz
-$ tar -zxf Image-ExifTool-12.01.tar.gz
-$ zip -g -r venv.zip Image-ExifTool-12.01
+$ zip -g -r venv.zip exiftool
 ```
 
 6. Exit out of docker container

@@ -3,5 +3,6 @@ env/
 *.tar.gz
 *.zip
 Image-ExifTool*
+exiftool*
 
 !.gitignore
