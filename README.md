@@ -94,7 +94,7 @@ The ```--rm``` flag means Docker will remove the container when you’re finishe
 ```animl/lambda`` is the name of the container image.
 
 
-3. Create and activate virtual env within the container
+4. Create and activate virtual env within the container
 
 ```sh
 $ cd output/
@@ -102,7 +102,7 @@ $ python3.6 -m venv --copies env
 $ source env/bin/activate
 ```
 
-6. Download exiftool and copy its executable and dependencies into 
+5. Download exiftool and copy its executable and dependencies into 
 `/output/exiftool/`
 
 ```sh
@@ -113,7 +113,7 @@ $ cp Image-ExifTool-12.01/exiftool exiftool/
 $ cp -r Image-ExifTool-12.01/lib exiftool/
 ```
 
-4. Install dependencies
+6. Install dependencies
 
 ```sh
 $ pip3.6 install --upgrade pip wheel
@@ -122,7 +122,7 @@ $ pip3.6 install --no-binary requests requests
 $ pip3.6 install --no-binary PyExifTool PyExifTool
 ```
 
-5. Strip out unnecessary files and zip up the site packages & exiftool executable
+7. Strip out unnecessary files and zip up the site packages & exiftool executable
 
 ```sh
 $ base_dir="/output"
@@ -131,7 +131,7 @@ $ pushd $VIRTUAL_ENV/lib/python3.6/site-packages/ && zip -r -9 -q $base_dir/venv
 $ zip -g -r venv.zip exiftool
 ```
 
-6. Exit out of docker container
+8. Exit out of docker container
 
 ```sh
 $ deactivate
