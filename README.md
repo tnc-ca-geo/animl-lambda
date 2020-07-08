@@ -17,10 +17,6 @@ images) are encoded in the MakerNotes field of the exifdata, and exiftool is
 the only metadata extractor that maintains manufacturer-specific decoders to 
 decode MakerNotes for a wide variety of cameras.
 
-The exiftool executable is available in an s3 bucket (s3://animl-dependencies), 
-and downloaded to temporary memory in the lambda each time it's run. This 
-saves space in the lambda package but might not be the cleanest approach.
-
 We are able to 
 [run Perl executibles](https://metacpan.org/pod/AWS::Lambda#Use-Prebuild-Public-Lambda-Layer) 
 by adding a Perl runtime layer to our lambda function with the following ARN:
@@ -62,9 +58,11 @@ Navigate to the AWS Lambda console to add the s3 ObjectCreated trigger for
 s3://animl-images (not sure how to do this from the aws lambda cli).
 
 ### Update the function's dependencies
-To update and repackage the python dependences, you'll need to spin up a docker 
+Python packages that have C bindings need to be built on a computer with the 
+same architecture as that which Lambda functions run (i.e., Linux), so to 
+update and repackage the python dependences, you'll need to spin up a docker 
 container to emulate the amazon linux environment and install the packages 
-there. 
+there.
 
 1. Check if the docker container exists. If you see the ```animl/lambda``` 
 image after running the following command, skip to step 3:
