@@ -51,7 +51,7 @@ def copy_to_dest(md, archive_bkt=ARCHIVE_BUCKET, prod_bkt=PROD_BUCKET):
     sn = 'unknown-camera'
     if 'SerialNumber' in md:
         sn = md['SerialNumber']
-    archive_key = os.path.join(sn, md['FileName'], md['Hash'] + ext[1])
+    archive_key = os.path.join(sn, md['FileName'] + '_' + md['Hash'] + ext[1])
     s3.copy(copy_source, archive_bkt, archive_key)
     # transfer to prod
     print('Transferring {} to {}'.format(md['FileName'], prod_bkt))
