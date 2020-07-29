@@ -33,8 +33,8 @@ def make_request(exif_data):
 
 def create_thumbnail(md, size=THUMB_SIZE, bkt=PROD_BUCKET, dir=PROD_DIR_THUMB):
     print('Creating thumbnail')
-    filename_root, ext = os.path.splitext(md['FileName'])
-    thumb_filename = '{}-small{}'.format(md['Hash'], ext)
+    file_ext = os.path.splitext(md['FileName'])
+    thumb_filename = '{}-small{}'.format(md['Hash'], file_ext[1])
     tmp_path_thumb = os.path.join('/tmp', thumb_filename)
     with Image.open(md['SourceFile']) as image:
         image.thumbnail(size)
@@ -45,17 +45,17 @@ def create_thumbnail(md, size=THUMB_SIZE, bkt=PROD_BUCKET, dir=PROD_DIR_THUMB):
 
 def copy_to_dest(md, archive_bkt=ARCHIVE_BUCKET, prod_bkt=PROD_BUCKET):
     copy_source = { 'Bucket': md['Bucket'], 'Key': md['Key'] }
-    ext = os.path.splitext(md['FileName'])
+    file_base, file_ext = os.path.splitext(md['FileName'])
     # transfer to archive
     print('Transferring {} to {}'.format(md['FileName'], archive_bkt))
     sn = 'unknown-camera'
     if 'SerialNumber' in md:
         sn = md['SerialNumber']
-    archive_key = os.path.join(sn, md['FileName'] + '_' + md['Hash'] + ext[1])
+    archive_key = os.path.join(sn, file_base + '_' + md['Hash'] + file_ext)
     s3.copy(copy_source, archive_bkt, archive_key)
     # transfer to prod
     print('Transferring {} to {}'.format(md['FileName'], prod_bkt))
-    prod_key = os.path.join(PROD_DIR_IMGS, md['Hash'] + ext[1])
+    prod_key = os.path.join(PROD_DIR_IMGS, md['Hash'] + file_ext)
     s3.copy(copy_source, prod_bkt, prod_key)
 
 def hash(img_path):
