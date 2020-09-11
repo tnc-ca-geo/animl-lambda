@@ -15,9 +15,9 @@ import hashlib
 import exiftool
 
 
-ANIML_IMG_API = 'https://df2878f8.ngrok.io/api/v1/images/save'
-ARCHIVE_BUCKET = 'animl-data-archive'
-PROD_BUCKET = 'animl-data-production'
+ANIML_IMG_API = os.environ['API_URL']
+ARCHIVE_BUCKET = 'animl-data-archive-{}'.format(os.environ['STAGE'])
+PROD_BUCKET = 'animl-data-production-{}'.format(os.environ['STAGE'])
 PROD_DIR_IMGS = 'images'
 PROD_DIR_THUMB = 'thumbnails'
 EXIFTOOL_PATH = '{}/exiftool'.format(os.environ['LAMBDA_TASK_ROOT'])
@@ -27,6 +27,7 @@ s3 = boto3.client('s3')
 
 
 def make_request(exif_data):
+    print('Making request')
     r = requests.post(ANIML_IMG_API, json=exif_data)
     print(r.status_code)
     # print(r.json())

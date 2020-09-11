@@ -1,8 +1,0 @@
-env/
-*.tar
-*.tar.gz
-*.zip
-Image-ExifTool*
-exiftool*
-
-!.gitignore

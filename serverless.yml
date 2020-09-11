@@ -1,0 +1,98 @@
+service: animl-lambda
+
+provider:
+  name: aws
+  runtime: python3.6
+  stage: ${opt:stage, 'dev'}
+  region: us-west-1
+  profile: serverless-admin
+  environment:
+    STAGE: ${opt:stage, self:provider.stage, 'dev'}
+    API_URL: https://e1vc45j344.execute-api.us-west-1.amazonaws.com/dev/
+
+functions:
+  ProcessCamtrapImage:
+    name: ProcessCamtrapImageLambdaFunction-${opt:stage, self:provider.stage, 'dev'}
+    handler: handler.handler
+    role: arn:aws:iam::719729260530:role/animl-lambda-role
+    events:
+      - s3:
+          bucket: animl-data-staging-${opt:stage, self:provider.stage, 'dev'}
+          existing: true
+    layers:
+      - arn:aws:lambda:us-west-1:445285296882:layer:perl-5-26-runtime:12
+
+resources:
+  Resources:
+    # Staging bucket
+    S3BucketAnimldatastaging:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: animl-data-staging-${opt:stage, self:provider.stage, 'dev'}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+    # Production bucket
+    S3BucketAnimldataproduction:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: animl-data-production-${opt:stage, self:provider.stage, 'dev'}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+    # Archive bucket
+    S3BucketAnimldataarchive:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: animl-data-archive-${opt:stage, self:provider.stage, 'dev'}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+    # Bucket policy for animl-data-staging
+    S3BucketPolicyAnimlDataStagingBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties: 
+        Bucket: 
+          Ref: S3BucketAnimldatastaging
+        PolicyDocument: 
+          Statement: 
+            -
+              Action: 
+                - "s3:*"
+              Effect: "Allow"
+              Resource:
+                - "arn:aws:s3:::animl-data-staging-${opt:stage, self:provider.stage, 'dev'}/*"
+                - "arn:aws:s3:::animl-data-staging-${opt:stage, self:provider.stage, 'dev'}"
+              Principal:
+                AWS: "arn:aws:iam::719729260530:user/animl-base"
+    # Lambda Permission grants the bucket permission to invoke the function
+    LambdaPermissionAnimldatastaging:
+      Type: AWS::Lambda::Permission
+      Properties:
+        FunctionName:
+          Fn::GetAtt: # grabs function arn
+            - ProcessCamtrapImageLambdaFunction
+            - Arn
+        Principal: s3.amazonaws.com
+        Action: lambda:InvokeFunction
+        SourceAccount:
+          Ref: AWS::AccountId
+        SourceArn: arn:aws:s3:::animl-data-staging-${opt:stage, self:provider.stage, 'dev'}
+
+custom:
+  pythonRequirements:
+    dockerizePip: non-linux
+    dockerFile: Dockerfile
+    useDownloadCache: false
+    useStaticCache: false
+    dockerExtraFiles:
+      - -r /output/exiftool/
+
+plugins:
+  - serverless-python-requirements

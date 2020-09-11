@@ -1,3 +1,7 @@
+# Serverless directories
+.serverless
+.serverless_plugins
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
