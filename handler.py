@@ -23,14 +23,25 @@ PROD_DIR_THUMB = 'thumbnails'
 EXIFTOOL_PATH = '{}/exiftool'.format(os.environ['LAMBDA_TASK_ROOT'])
 SUPPORTED_FILE_TYPES = ['.jpg', '.png']
 THUMB_SIZE = (120, 120)
+QUERY = """mutation CreateImageRecord($input: ImageInput!){
+    createImage(input: $input) {
+        image {
+            _id
+            hash
+            objectKey
+        }
+    }
+}"""
+
 s3 = boto3.client('s3')
 
 
-def make_request(exif_data):
-    print('Making request')
-    r = requests.post(ANIML_IMG_API, json=exif_data)
+def make_request(md, url=ANIML_IMG_API, query=QUERY):
+    print('Making request with metadata: {}'.format(md))
+    image_input = {'input': { 'md': md }}
+    r = requests.post(url, json={'query': query, 'variables': image_input})
     print(r.status_code)
-    # print(r.json())
+    print(r.json())
 
 def create_thumbnail(md, size=THUMB_SIZE, bkt=PROD_BUCKET, dir=PROD_DIR_THUMB):
     print('Creating thumbnail')
@@ -40,7 +51,7 @@ def create_thumbnail(md, size=THUMB_SIZE, bkt=PROD_BUCKET, dir=PROD_DIR_THUMB):
     with Image.open(md['SourceFile']) as image:
         image.thumbnail(size)
         image.save(tmp_path_thumb)
-    print('Transferring {} to {}'.format(thumb_filename, bkt))
+    print('Transferring thumbnail {} to {}'.format(thumb_filename, bkt))
     thumb_key = os.path.join(dir, thumb_filename)
     s3.upload_file(tmp_path_thumb, bkt, thumb_key)
 
@@ -52,42 +63,27 @@ def copy_to_dest(md, archive_bkt=ARCHIVE_BUCKET, prod_bkt=PROD_BUCKET):
     sn = 'unknown-camera'
     if 'SerialNumber' in md:
         sn = md['SerialNumber']
-    archive_key = os.path.join(sn, file_base + '_' + md['Hash'] + file_ext)
-    s3.copy(copy_source, archive_bkt, archive_key)
+    else:
+        md['SerialNumber'] = sn
+    md['ArchiveKey'] = os.path.join(sn, file_base + '_' + md['Hash'] + file_ext)
+    s3.copy(copy_source, archive_bkt, md['ArchiveKey'])
     # transfer to prod
     print('Transferring {} to {}'.format(md['FileName'], prod_bkt))
-    prod_key = os.path.join(PROD_DIR_IMGS, md['Hash'] + file_ext)
-    s3.copy(copy_source, prod_bkt, prod_key)
+    md['ProdBucket'] = prod_bkt
+    md['ProdKey'] = os.path.join(PROD_DIR_IMGS, md['Hash'] + file_ext)
+    s3.copy(copy_source, prod_bkt, md['ProdKey'])
+    return md
 
 def hash(img_path):
     image = Image.open(img_path)
     img_hash = hashlib.md5(image.tobytes()).hexdigest()
     return img_hash
 
-def parse_bec_comment_field(exif_data):
-    """
-    BuckEyeCams nest their serial numbers in its 'comment' field
-    which is a long string, so we need to parse it
-    """
-    ret = {}
-    comment = exif_data['Comment'].splitlines()
-    for item in comment:
-        if 'SN=' in item:
-            ret['SerialNumber'] = item.split('=')[1]
-        elif 'TEXT1=' in item:
-            ret['text_1'] = item.split('=')[1]
-        elif 'TEXT2=' in item:
-            ret['text_2'] = item.split('=')[1]
-    return ret
-
 def enrich_meta_data(md, exif_data):
-    if ('Make' in exif_data) and (exif_data['Make'] == 'BuckEyeCam'):
-        comment_field = parse_bec_comment_field(exif_data)
-        exif_data.update(comment_field)
+    # md['UserSetData'] = parse_user_set_data(exif_data)
     md['Hash'] = hash(exif_data['SourceFile'])
     exif_data.update(md)
     md = exif_data
-    print('Metadata: {}'.format(md))
     return md
 
 def get_exif_data(img_path):
@@ -127,7 +123,7 @@ def handler(event, context):
             tmp_path = download(md['Bucket'], md['Key'])
             exif_data = get_exif_data(tmp_path)
             md = enrich_meta_data(md, exif_data)
-            copy_to_dest(md)
+            md = copy_to_dest(md)
             create_thumbnail(md)
             make_request(md)
         else:
