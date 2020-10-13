@@ -23,6 +23,20 @@ functions:
       - arn:aws:lambda:us-west-1:445285296882:layer:perl-5-26-runtime:12
 
 resources:
+  # AWS Resources naming conventions in Serverless:
+  #   https://www.serverless.com/framework/docs/providers/aws/guide/resources/
+
+  # Logical ID:
+  #   The logical ID must be alphanumeric (A-Za-z0-9) and unique within the 
+  #   template. Use the logical name to reference the resource in other parts 
+  #   of the template.
+
+  # Physical ID:
+  #   The actual assigned name for that resource, such as an EC2 instance ID or 
+  #   an S3 bucket name. Use the physical IDs to identify resources outside of 
+  #   AWS CloudFormation templates, but only after the resources have been 
+  #   created.
+
   Resources:
     # Staging bucket
     S3BucketAnimldatastaging:
@@ -34,6 +48,7 @@ resources:
           BlockPublicPolicy: true
           IgnorePublicAcls: true
           RestrictPublicBuckets: true
+
     # Production bucket
     S3BucketAnimldataproduction:
       Type: AWS::S3::Bucket
@@ -44,6 +59,7 @@ resources:
           BlockPublicPolicy: true
           IgnorePublicAcls: true
           RestrictPublicBuckets: true
+
     # Archive bucket
     S3BucketAnimldataarchive:
       Type: AWS::S3::Bucket
@@ -54,6 +70,7 @@ resources:
           BlockPublicPolicy: true
           IgnorePublicAcls: true
           RestrictPublicBuckets: true
+
     # Bucket policy for animl-data-staging
     S3BucketPolicyAnimlDataStagingBucketPolicy:
       Type: AWS::S3::BucketPolicy
@@ -71,6 +88,7 @@ resources:
                 - "arn:aws:s3:::animl-data-staging-${opt:stage, self:provider.stage, 'dev'}"
               Principal:
                 AWS: "arn:aws:iam::719729260530:user/animl-base"
+
     # Lambda Permission grants the bucket permission to invoke the function
     LambdaPermissionAnimldatastaging:
       Type: AWS::Lambda::Permission
@@ -84,6 +102,86 @@ resources:
         SourceAccount:
           Ref: AWS::AccountId
         SourceArn: arn:aws:s3:::animl-data-staging-${opt:stage, self:provider.stage, 'dev'}
+
+    # TODO: SSL certificate for production bucket Cloudfront distrobution?
+    # only need if we want a custom CNAME
+    # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-cloudfront-distribution-viewercertificate.html
+
+    # Origin Access Identity for production bucket Cloudfront distrobution
+    CloudfrontOriginAccessIdentityAnimldataproduction:
+      Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+      Properties:
+        CloudFrontOriginAccessIdentityConfig:
+          Comment: "orign access identity for animl data production ${opt:stage, self:provider.stage, 'dev'} bucket"
+
+    # TODO: Cloudfront distrobution for production bucket
+    # API docs - https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-cloudfront-distribution.html
+    CloudfrontDistributionAnimldataproduction:
+      DependsOn:
+        - S3BucketAnimldataproduction
+        - CloudfrontOriginAccessIdentityAnimldataproduction
+      Type: AWS::CloudFront::Distribution
+      Properties:
+        DistributionConfig:
+          Origins:
+          - DomainName: animl-data-production-${opt:stage, self:provider.stage, 'dev'}.s3.amazonaws.com
+            Id: !Ref S3BucketAnimldataproduction
+            S3OriginConfig:
+              OriginAccessIdentity:
+                Fn::Join:
+                  - ""
+                  - - "origin-access-identity/cloudfront/"
+                    - !Ref CloudfrontOriginAccessIdentityAnimldataproduction
+          Enabled: 'true'
+          Comment: "Cloudfront distro for animl data production ${opt:stage, self:provider.stage, 'dev'} bucket"
+          Logging:
+            IncludeCookies: 'false'
+            Bucket: geodesignlogs.s3.amazonaws.com
+            Prefix: animl-data-production-${opt:stage, self:provider.stage, 'dev'}
+          # Aliases:
+          # - mysite.example.com
+          # - yoursite.example.com
+          DefaultCacheBehavior:
+            AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+            TargetOriginId: !Ref S3BucketAnimldataproduction
+            MinTTL: 86400  # 1 day - perhaps adjust for staging? 
+            MaxTTL: 31536000  # 1 year
+            ForwardedValues:
+              QueryString: 'false'
+              Cookies:
+                Forward: none
+            # TrustedSigners:
+            # - 1234567890EX
+            # - 1234567891EX
+            ViewerProtocolPolicy: "redirect-to-https"
+          # PriceClass: PriceClass_200
+          ViewerCertificate:
+              CloudFrontDefaultCertificate: 'true'
+
+    # Bucket policy for production bucket to allow cloudfront to access it
+    S3BucketPolicyAnimlDataProductionBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties: 
+        Bucket: 
+          Ref: S3BucketAnimldataproduction
+        PolicyDocument: 
+          Statement: 
+            -
+              Action: 
+                - 's3:GetObject'
+              Effect: "Allow"
+              Resource:
+                - "arn:aws:s3:::animl-data-production-${opt:stage, self:provider.stage, 'dev'}/*"
+                - "arn:aws:s3:::animl-data-production-${opt:stage, self:provider.stage, 'dev'}"
+              Principal:
+                AWS:
+                  Fn::Join:
+                    - ""
+                    - - "arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity "
+                      - !Ref CloudfrontOriginAccessIdentityAnimldataproduction
 
 custom:
   pythonRequirements:
