@@ -2,10 +2,14 @@
 Lambda function for ingesting and processing camera trap images.
 
 ## Related repos
+
+- Animl API               http://github.com/tnc-ca-geo/animl-api
+- Animl frontend          http://github.com/tnc-ca-geo/animl-frontend
 - Animl base program      http://github.com/tnc-ca-geo/animl-base
+- Animl ingest function   http://github.com/tnc-ca-geo/animl-ingest
 - Animl ML resources      http://github.com/tnc-ca-geo/animl-ml
 - Animl desktop app       https://github.com/tnc-ca-geo/animl-desktop
-- Animl cloud platform    https://github.com/tnc-ca-geo/animl
+
 
 ## About
 The animl-ingest stack is a collection of AWS resources managed by the 
