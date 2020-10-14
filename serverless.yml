@@ -1,4 +1,4 @@
-service: animl-lambda
+service: animl-lambda # TODO: change to animl-ingest? What happens if I do?
 
 provider:
   name: aws
@@ -23,21 +23,13 @@ functions:
       - arn:aws:lambda:us-west-1:445285296882:layer:perl-5-26-runtime:12
 
 resources:
-  # AWS Resources naming conventions in Serverless:
-  #   https://www.serverless.com/framework/docs/providers/aws/guide/resources/
-
-  # Logical ID:
-  #   The logical ID must be alphanumeric (A-Za-z0-9) and unique within the 
-  #   template. Use the logical name to reference the resource in other parts 
-  #   of the template.
-
-  # Physical ID:
-  #   The actual assigned name for that resource, such as an EC2 instance ID or 
-  #   an S3 bucket name. Use the physical IDs to identify resources outside of 
-  #   AWS CloudFormation templates, but only after the resources have been 
-  #   created.
-
   Resources:
+    # TODO: break up resources into separate files: 
+    # https://medium.com/swlh/create-deploy-a-serverless-react-app-to-s3-cloudfront-on-aws-4f83fa605ff0
+
+    # AWS Resources naming conventions in Serverless:
+    # https://www.serverless.com/framework/docs/providers/aws/guide/resources/
+
     # Staging bucket
     S3BucketAnimldatastaging:
       Type: AWS::S3::Bucket

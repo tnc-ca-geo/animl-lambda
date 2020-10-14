@@ -1,5 +1,5 @@
-# animl-lambda
-Lambda function for processing camera trap images.
+# Animl Ingest
+Lambda function for ingesting and processing camera trap images.
 
 ## Related repos
 - Animl base program      http://github.com/tnc-ca-geo/animl-base
@@ -8,7 +8,7 @@ Lambda function for processing camera trap images.
 - Animl cloud platform    https://github.com/tnc-ca-geo/animl
 
 ## About
-The animl-lambda stack is a collection of AWS resources managed by the 
+The animl-ingest stack is a collection of AWS resources managed by the 
 [Serverless framework](https://www.serverless.com/). When users or applications 
 such as [animl-base](http://github.com/tnc-ca-geo/animl-base) upload images to 
 the ```animl-staging-<stage>``` bucket, a lambda function:
@@ -34,10 +34,10 @@ Good instructions
 
 ### Make a project direcory and clone this repo
 ```
-mkdir animl-lambda
-cd animl-lambda
-git clone https://github.com/tnc-ca-geo/animl-lambda.git
-cd animl-lambda
+mkdir animl-ingest
+cd animl-ingest
+git clone https://github.com/tnc-ca-geo/animl-ingest.git
+cd animl-ingest
 ```
 
 ### Clone serverless-python-requirements plugin
