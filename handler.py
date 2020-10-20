@@ -23,7 +23,7 @@ PROD_DIR_THUMB = 'thumbnails'
 EXIFTOOL_PATH = '{}/exiftool'.format(os.environ['LAMBDA_TASK_ROOT'])
 SUPPORTED_FILE_TYPES = ['.jpg', '.png']
 THUMB_SIZE = (120, 120)
-QUERY = """mutation CreateImageRecord($input: ImageInput!){
+QUERY = """mutation CreateImageRecord($input: CreateImageInput!){
     createImage(input: $input) {
         image {
             _id
