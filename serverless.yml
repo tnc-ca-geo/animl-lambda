@@ -38,7 +38,7 @@ functions:
           bucket: animl-data-staging-${opt:stage, self:provider.stage, 'dev'}
           existing: true
     layers:
-      - arn:aws:lambda:us-west-1:445285296882:layer:perl-5-26-runtime:12
+      - arn:aws:lambda:${self:provider.region}:445285296882:layer:perl-5-26-runtime:12
 
 resources:
   Resources:
