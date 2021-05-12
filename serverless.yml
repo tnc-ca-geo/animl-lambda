@@ -26,7 +26,7 @@ provider:
     - 'arn:aws:iam::aws:policy/AWSLambdaExecute'
   environment:
     STAGE: ${opt:stage, self:provider.stage, 'dev'}
-    API_URL: https://xnjdawbz5j.execute-api.us-west-1.amazonaws.com/dev/
+    API_URL: https://qxtg8jjpqf.execute-api.us-west-2.amazonaws.com/dev/
 
 functions:
   ProcessCamtrapImage:
