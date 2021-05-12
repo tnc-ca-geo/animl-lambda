@@ -1,20 +1,38 @@
-service: animl-lambda # TODO: change to animl-ingest? What happens if I do?
+org: animl
+app: animl
+service: animl-ingest
 
 provider:
   name: aws
   runtime: python3.6
   stage: ${opt:stage, 'dev'}
-  region: us-west-1
-  profile: serverless-admin
+  region: us-west-2
+  profile: animl
+  iamRoleStatements:
+    - Effect: 'Allow'
+      Action:
+        - 's3:DeleteObject'
+      Resource:
+        - Fn::Join:
+          - ''
+          - - 'arn:aws:s3:::'
+            - Ref: S3BucketAnimldatastaging
+        - Fn::Join:
+          - ''
+          - - 'arn:aws:s3:::'
+            - Ref: S3BucketAnimldatastaging
+            - '/*'
+  iamManagedPolicies:
+    - 'arn:aws:iam::aws:policy/AWSLambdaExecute'
   environment:
     STAGE: ${opt:stage, self:provider.stage, 'dev'}
-    API_URL: https://e1vc45j344.execute-api.us-west-1.amazonaws.com/dev/
+    API_URL: https://xnjdawbz5j.execute-api.us-west-1.amazonaws.com/dev/
 
 functions:
   ProcessCamtrapImage:
     name: ProcessCamtrapImageLambdaFunction-${opt:stage, self:provider.stage, 'dev'}
     handler: handler.handler
-    role: arn:aws:iam::719729260530:role/animl-lambda-role
+    # role: arn:aws:iam::719729260530:role/animl-lambda-role # should this be defined in serverless? Move up to service level?
     events:
       - s3:
           bucket: animl-data-staging-${opt:stage, self:provider.stage, 'dev'}
@@ -79,7 +97,7 @@ resources:
                 - "arn:aws:s3:::animl-data-staging-${opt:stage, self:provider.stage, 'dev'}/*"
                 - "arn:aws:s3:::animl-data-staging-${opt:stage, self:provider.stage, 'dev'}"
               Principal:
-                AWS: "arn:aws:iam::719729260530:user/animl-base"
+                AWS: "arn:aws:iam::830244800171:user/animl-base"
 
     # Lambda Permission grants the bucket permission to invoke the function
     LambdaPermissionAnimldatastaging:
@@ -128,7 +146,7 @@ resources:
           Comment: "Cloudfront distro for animl data production ${opt:stage, self:provider.stage, 'dev'} bucket"
           Logging:
             IncludeCookies: 'false'
-            Bucket: geodesignlogs.s3.amazonaws.com
+            Bucket: animllogs.s3.amazonaws.com
             Prefix: animl-data-production-${opt:stage, self:provider.stage, 'dev'}
           # Aliases:
           # - mysite.example.com

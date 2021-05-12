@@ -93,6 +93,7 @@ def get_exif_data(img_path):
         exif_data = et.get_metadata(img_path)
         # remove 'group names' from keys/exif-tags
         for key, value in exif_data.items():
+            print('exif key: {}, value: {}'.format(key, value))
             new_key = key if (':' not in key) else key.split(':')[1]
             ret[new_key] = value
         return ret
