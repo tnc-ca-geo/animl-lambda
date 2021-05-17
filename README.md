@@ -32,8 +32,9 @@ The instructions below assume you have the following tools globally installed:
 - Docker
 - aws-cli
 
-### Create "serverless-admin" AWS config profile
-Good instructions 
+### Create "animl" AWS config profile
+The name of the profile must be "animl", because that's what 
+```serverles.yml``` will be looking for. Good instructions 
 [here](https://www.serverless.com/framework/docs/providers/aws/guide/credentials/).
 
 ### Make a project direcory and clone this repo
