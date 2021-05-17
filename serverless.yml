@@ -29,9 +29,6 @@ provider:
       Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*
   iamManagedPolicies:
     - 'arn:aws:iam::aws:policy/AWSLambdaExecute'
-  # TODO: add serverless-dot-env plugin and manage env variables there
-  # Also see constants defined at top of handler.py for more vars
-  # that should probably be in .env
   environment:
     STAGE: ${opt:stage, self:provider.stage, 'dev'}
     ANIML_API_URL: https://qxtg8jjpqf.execute-api.us-west-2.amazonaws.com/dev/
@@ -133,9 +130,7 @@ resources:
           Comment: "orign access identity for animl data production ${opt:stage, self:provider.stage, 'dev'} bucket"
 
     # Cloudfront distrobution for production bucket
-    # API docs - https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-cloudfront-distribution.html
-    # TODO: how to Output the domain name suc
-    
+    # API docs - https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-cloudfront-distribution.html    
     CloudfrontDistributionAnimldataproduction:
       DependsOn:
         - S3BucketAnimldataproduction
@@ -202,14 +197,6 @@ resources:
                     - ""
                     - - "arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity "
                       - !Ref CloudfrontOriginAccessIdentityAnimldataproduction
-
-  Outputs:
-    imagesUrl:
-      Description: Cloudfront distro domain name for image bucket
-      Value: { "Fn::GetAtt": ["CloudfrontDistributionAnimldataproduction", "DomainName"] }
-      Export:
-        Name: imagesUrl-${opt:stage, self:provider.stage, 'dev'}
-    # TODO: add outputs for S3 buckets
 
 custom:
   pythonRequirements:
