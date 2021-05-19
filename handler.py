@@ -21,6 +21,16 @@ PROD_DIR_THUMB = "thumbnails"
 EXIFTOOL_PATH = "{}/exiftool".format(os.environ["LAMBDA_TASK_ROOT"])
 SUPPORTED_FILE_TYPES = [".jpg", ".png"]
 THUMB_SIZE = (120, 120)
+ERROR_TYPES = [
+  {
+    "keyword": "duplicate",
+    "deadletter_dir": "duplicate-error"
+  },
+  {
+    "keyword": "validation",
+    "deadletter_dir": "duplicate-error"
+  }
+]
 SSM_NAMES = {
   "ANIML_API_URL": "animl-api-url-{}".format(os.environ["STAGE"]),
   "ARCHIVE_BUCKET": "animl-images-archive-bucket-{}".format(os.environ["STAGE"]),
@@ -62,14 +72,13 @@ def create_thumbnail(md, config, size=THUMB_SIZE, dir=PROD_DIR_THUMB):
 def copy_to_dlb(r, md, config):
     dl_bkt = config["DEADLETTER_BUCKET"]
     copy_source = { "Bucket": md["Bucket"], "Key": md["Key"] }
-    cause = "unknown"
+    dest_dir = "unknown"
     for error in r["errors"]:
         msg = error["message"].lower()
-        if "duplicate" in msg:
-            cause = "duplicate"
-        if "validation" in msg:
-            cause = "validation"
-    md["DeadLetterKey"] = os.path.join(cause, md["FileName"])
+        for error_type in ERROR_TYPES:
+            if error_type["keyword"] in msg:
+                dest_dir = error_type["deadletter_dir"]
+    md["DeadLetterKey"] = os.path.join(dest_dir, md["FileName"])
     # transfer to dead letter bucket
     print("Transferring {} to {}".format(md["FileName"], dl_bkt))
     s3.copy(copy_source, dl_bkt, md["DeadLetterKey"])
