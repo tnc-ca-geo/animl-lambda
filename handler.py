@@ -25,12 +25,12 @@ SSM_NAMES = {
   "ANIML_API_URL": "animl-api-url-{}".format(os.environ["STAGE"]),
   "ARCHIVE_BUCKET": "animl-images-archive-bucket-{}".format(os.environ["STAGE"]),
   "PROD_BUCKET": "animl-images-prod-bucket-{}".format(os.environ["STAGE"]),
+  "DEADLETTER_BUCKET": "animl-images-dead-letter-bucket-{}".format(os.environ["STAGE"]),
 }
 QUERY = """mutation CreateImageRecord($input: CreateImageInput!){
     createImage(input: $input) {
         image {
             _id
-            hash
             objectKey
         }
     }
@@ -38,13 +38,13 @@ QUERY = """mutation CreateImageRecord($input: CreateImageInput!){
 
 s3 = boto3.client("s3")
 
-def make_request(md, config, query=QUERY):
-    print("Making request with metadata: {}".format(md))
+def save_to_db(md, config, query=QUERY):
+    print("Posting metadata to API: {}".format(md))
     url = config["ANIML_API_URL"]
     image_input = {"input": { "md": md }}
     r = requests.post(url, json={"query": query, "variables": image_input})
-    print(r.status_code)
-    print(r.json())
+    print("Response: {}".format(r.json()))
+    return r.json()
 
 def create_thumbnail(md, config, size=THUMB_SIZE, dir=PROD_DIR_THUMB):
     print("Creating thumbnail")
@@ -59,24 +59,30 @@ def create_thumbnail(md, config, size=THUMB_SIZE, dir=PROD_DIR_THUMB):
     thumb_key = os.path.join(dir, thumb_filename)
     s3.upload_file(tmp_path_thumb, prod_bkt, thumb_key)
 
+def copy_to_dlb(r, md, config):
+    dl_bkt = config["DEADLETTER_BUCKET"]
+    copy_source = { "Bucket": md["Bucket"], "Key": md["Key"] }
+    cause = "unknown"
+    for error in r["errors"]:
+        msg = error["message"].lower()
+        if "duplicate" in msg:
+            cause = "duplicate"
+        if "validation" in msg:
+            cause = "validation"
+    md["DeadLetterKey"] = os.path.join(cause, md["FileName"])
+    # transfer to dead letter bucket
+    print("Transferring {} to {}".format(md["FileName"], dl_bkt))
+    s3.copy(copy_source, dl_bkt, md["DeadLetterKey"])
+
 def copy_to_dest(md, config):
     archive_bkt = config["ARCHIVE_BUCKET"]
     prod_bkt = config["PROD_BUCKET"]
     copy_source = { "Bucket": md["Bucket"], "Key": md["Key"] }
-    file_base, file_ext = os.path.splitext(md["FileName"])
     # transfer to archive
     print("Transferring {} to {}".format(md["FileName"], archive_bkt))
-    sn = "unknown-camera"
-    if "SerialNumber" in md:
-        sn = md["SerialNumber"]
-    else:
-        md["SerialNumber"] = sn
-    md["ArchiveKey"] = os.path.join(sn, file_base + "_" + md["Hash"] + file_ext)
     s3.copy(copy_source, archive_bkt, md["ArchiveKey"])
     # transfer to prod
     print("Transferring {} to {}".format(md["FileName"], prod_bkt))
-    md["ProdBucket"] = prod_bkt
-    md["ProdKey"] = os.path.join(PROD_DIR_IMGS, md["Hash"] + file_ext)
     s3.copy(copy_source, prod_bkt, md["ProdKey"])
     return md
 
@@ -85,11 +91,16 @@ def hash(img_path):
     img_hash = hashlib.md5(image.tobytes()).hexdigest()
     return img_hash
 
-def enrich_meta_data(md, exif_data):
-    # md["UserSetData"] = parse_user_set_data(exif_data)
-    md["Hash"] = hash(exif_data["SourceFile"])
+def enrich_meta_data(md, exif_data, config):
     exif_data.update(md)
     md = exif_data
+    md["Hash"] = hash(md["SourceFile"])
+    file_base, file_ext = os.path.splitext(md["FileName"])
+    archive_filename = file_base + "_" + md["Hash"] + file_ext
+    md["SerialNumber"] = md.get("SerialNumber") or "unknown"
+    md["ArchiveKey"] = os.path.join(md["SerialNumber"], archive_filename)
+    md["ProdKey"] = os.path.join(PROD_DIR_IMGS, md["Hash"] + file_ext)
+    md["ProdBucket"] = config["PROD_BUCKET"]
     return md
 
 def get_exif_data(img_path):
@@ -148,10 +159,13 @@ def handler(event, context):
         if validate(md["FileName"]):
             tmp_path = download(md["Bucket"], md["Key"])
             exif_data = get_exif_data(tmp_path)
-            md = enrich_meta_data(md, exif_data)
-            md = copy_to_dest(md, config)
-            create_thumbnail(md, config)
-            make_request(md, config)
+            md = enrich_meta_data(md, exif_data, config)
+            r = save_to_db(md, config)
+            if r.get("errors") is None:
+                copy_to_dest(md, config)
+                create_thumbnail(md, config)
+            else:
+                copy_to_dlb(r, md, config)
         else:
             print("{} is not a supported file type".format(md["FileName"]))
         print("Deleting {} from {}".format(md["Key"], md["Bucket"]))

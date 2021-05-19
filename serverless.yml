@@ -34,10 +34,9 @@ provider:
     ANIML_API_URL: https://qxtg8jjpqf.execute-api.us-west-2.amazonaws.com/dev/
 
 functions:
-  ProcessCamtrapImage:
-    name: ProcessCamtrapImageLambdaFunction-${opt:stage, self:provider.stage, 'dev'}
+  IngestImage:
+    name: IngestImageLambdaFunction-${opt:stage, self:provider.stage, 'dev'}
     handler: handler.handler
-    # role: arn:aws:iam::719729260530:role/animl-lambda-role # should this be defined in serverless? Move up to service level?
     events:
       - s3:
           bucket: animl-data-staging-${opt:stage, self:provider.stage, 'dev'}
@@ -85,6 +84,17 @@ resources:
           BlockPublicPolicy: true
           IgnorePublicAcls: true
           RestrictPublicBuckets: true
+    
+    # Dead letter bucket
+    S3BucketAnimldatadeadletter:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: animl-data-dead-letter-${opt:stage, self:provider.stage, 'dev'}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
 
     # Bucket policy for animl-data-staging
     S3BucketPolicyAnimlDataStagingBucketPolicy:
@@ -110,7 +120,7 @@ resources:
       Properties:
         FunctionName:
           Fn::GetAtt: # grabs function arn
-            - ProcessCamtrapImageLambdaFunction
+            - IngestImageLambdaFunction
             - Arn
         Principal: s3.amazonaws.com
         Action: lambda:InvokeFunction
