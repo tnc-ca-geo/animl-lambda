@@ -21,16 +21,6 @@ PROD_DIR_THUMB = "thumbnails"
 EXIFTOOL_PATH = "{}/exiftool".format(os.environ["LAMBDA_TASK_ROOT"])
 SUPPORTED_FILE_TYPES = [".jpg", ".png"]
 THUMB_SIZE = (120, 120)
-ERROR_TYPES = [
-  {
-    "keyword": "duplicate",
-    "deadletter_dir": "duplicate-error"
-  },
-  {
-    "keyword": "validation",
-    "deadletter_dir": "duplicate-error"
-  }
-]
 SSM_NAMES = {
   "ANIML_API_URL": "animl-api-url-{}".format(os.environ["STAGE"]),
   "ARCHIVE_BUCKET": "animl-images-archive-bucket-{}".format(os.environ["STAGE"]),
@@ -54,6 +44,7 @@ def save_to_db(md, config, query=QUERY):
     image_input = {"input": { "md": md }}
     r = requests.post(url, json={"query": query, "variables": image_input})
     print("Response: {}".format(r.json()))
+    print("Status code: {}".format(r.status_code))
     return r.json()
 
 def create_thumbnail(md, config, size=THUMB_SIZE, dir=PROD_DIR_THUMB):
@@ -72,12 +63,10 @@ def create_thumbnail(md, config, size=THUMB_SIZE, dir=PROD_DIR_THUMB):
 def copy_to_dlb(r, md, config):
     dl_bkt = config["DEADLETTER_BUCKET"]
     copy_source = { "Bucket": md["Bucket"], "Key": md["Key"] }
-    dest_dir = "unknown"
+    dest_dir = "UNKNOWN_ERROR"
     for error in r["errors"]:
-        msg = error["message"].lower()
-        for error_type in ERROR_TYPES:
-            if error_type["keyword"] in msg:
-                dest_dir = error_type["deadletter_dir"]
+        if "extensions" in error and "code" in error["extensions"]:
+            dest_dir = error["extensions"]["code"]
     md["DeadLetterKey"] = os.path.join(dest_dir, md["FileName"])
     # transfer to dead letter bucket
     print("Transferring {} to {}".format(md["FileName"], dl_bkt))
@@ -132,6 +121,19 @@ def download(bucket, key):
     s3.download_file(bucket, key, tmp_path)
     return tmp_path
 
+def process_image(md, config):
+    tmp_path = download(md["Bucket"], md["Key"])
+    exif_data = get_exif_data(tmp_path)
+    md = enrich_meta_data(md, exif_data, config)
+    r = save_to_db(md, config)
+    if ("errors" in r or 
+        "error" in r.get("message") or 
+        r.get("data") is None):
+        copy_to_dlb(r, md, config)
+    else:
+        copy_to_dest(md, config)
+        create_thumbnail(md, config)
+
 def validate(file_name):
     ext = os.path.splitext(file_name)
     if ext[1].lower() not in SUPPORTED_FILE_TYPES:
@@ -141,14 +143,14 @@ def validate(file_name):
 def getConfig(context, ssm_names=SSM_NAMES):
     ret = {}
     for key, value in ssm_names.items():
-      try:
-        ret[key] = getattr(context,"config").get(value)
-        if ret[key] is None:
-            raise ValueError(value)
-      except ValueError as err:
-        print("SSN name '{}' was not found".format(err))
-      except:
-        print("An error occured fetching remote config")
+        try:
+            ret[key] = getattr(context,"config").get(value)
+            if ret[key] is None:
+                raise ValueError(value)
+        except ValueError as err:
+            print("SSN name '{}' was not found".format(err))
+        except:
+            print("An error occured fetching remote config")
     return ret
 
 @ssm.cache(
@@ -166,15 +168,7 @@ def handler(event, context):
         print("New file detected in {}: {}".format(md["Bucket"], md["Key"]))
         md["FileName"] = ntpath.basename(md["Key"])
         if validate(md["FileName"]):
-            tmp_path = download(md["Bucket"], md["Key"])
-            exif_data = get_exif_data(tmp_path)
-            md = enrich_meta_data(md, exif_data, config)
-            r = save_to_db(md, config)
-            if r.get("errors") is None:
-                copy_to_dest(md, config)
-                create_thumbnail(md, config)
-            else:
-                copy_to_dlb(r, md, config)
+          process_image(md, config)
         else:
             print("{} is not a supported file type".format(md["FileName"]))
         print("Deleting {} from {}".format(md["Key"], md["Bucket"]))
