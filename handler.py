@@ -14,11 +14,14 @@ import exiftool
 from lambda_cache import ssm
 
 
-PROD_DIR_IMGS = "images"
-PROD_DIR_THUMB = "thumbnails"
+PROD_DIR_IMGS = "original"
 EXIFTOOL_PATH = "{}/exiftool".format(os.environ["LAMBDA_TASK_ROOT"])
 SUPPORTED_FILE_TYPES = [".jpg", ".png"]
-THUMB_SIZE = (120, 120)
+# THUMB_SIZE = (120, 120)
+IMG_SIZES = {
+  'medium': (900, 900),
+  'small': (120, 120)
+}
 SSM_NAMES = {
     "ANIML_API_URL": "animl-api-url-{}".format(os.environ["STAGE"]),
     "ARCHIVE_BUCKET": "animl-images-archive-bucket-{}".format(os.environ["STAGE"]),
@@ -39,18 +42,19 @@ QUERY = gql("""
 
 s3 = boto3.client("s3")
 
-def create_thumbnail(md, config, size=THUMB_SIZE, dir=PROD_DIR_THUMB):
-    print("Creating thumbnail")
+def resize(md, config, sizes=IMG_SIZES):
+    print("Resizing image")
     prod_bkt = config["PROD_BUCKET"]
     file_ext = os.path.splitext(md["FileName"])
-    thumb_filename = "{}-small{}".format(md["Hash"], file_ext[1])
-    tmp_path_thumb = os.path.join("/tmp", thumb_filename)
-    with Image.open(md["SourceFile"]) as image:
-        image.thumbnail(size)
-        image.save(tmp_path_thumb)
-    print("Transferring thumbnail {} to {}".format(thumb_filename, prod_bkt))
-    thumb_key = os.path.join(dir, thumb_filename)
-    s3.upload_file(tmp_path_thumb, prod_bkt, thumb_key)
+    for size, dims in sizes.items():
+        filename = "{}-{}{}".format(md["Hash"], size, file_ext[1])
+        tmp_path = os.path.join("/tmp", filename)
+        with Image.open(md["SourceFile"]) as image:
+            image.thumbnail(dims)
+            image.save(tmp_path)
+            print("Transferring thumbnail {} to {}".format(filename, prod_bkt))
+            thumb_key = os.path.join(size, filename)
+            s3.upload_file(tmp_path, prod_bkt, thumb_key)
 
 def copy_to_dlb(errors, md, config):
     dl_bkt = config["DEADLETTER_BUCKET"]
@@ -88,7 +92,7 @@ def save_image(md, config, query=QUERY):
         r = client.execute(query, variable_values=image_input)
         print("Response: {}".format(r))
         copy_to_dest(md, config)
-        create_thumbnail(md, config)
+        resize(md, config)
     except Exception as e:
         print("Error posting to backend: {}".format(e))
         errors = vars(e).get("errors", [])
