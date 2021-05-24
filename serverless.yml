@@ -37,9 +37,11 @@ functions:
   IngestImage:
     name: IngestImageLambdaFunction-${opt:stage, self:provider.stage, 'dev'}
     handler: handler.handler
+    maximumRetryAttempts: 0
     events:
       - s3:
           bucket: animl-data-staging-${opt:stage, self:provider.stage, 'dev'}
+          event: s3:ObjectCreated:*
           existing: true
     layers:
       - arn:aws:lambda:${self:provider.region}:445285296882:layer:perl-5-26-runtime:12

@@ -1,17 +1,15 @@
 #!/opt/bin/perl
 
+import os
+import uuid
+import ntpath
+from urllib.parse import unquote_plus
+import hashlib
 from PIL import Image, ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 import boto3
-import requests
-import os
-import sys
-import uuid
-import subprocess
-import ntpath
-from urllib.parse import unquote_plus
-import json
-import hashlib
+from gql import Client, gql
+from gql.transport.requests import RequestsHTTPTransport
 import exiftool
 from lambda_cache import ssm
 
@@ -22,30 +20,24 @@ EXIFTOOL_PATH = "{}/exiftool".format(os.environ["LAMBDA_TASK_ROOT"])
 SUPPORTED_FILE_TYPES = [".jpg", ".png"]
 THUMB_SIZE = (120, 120)
 SSM_NAMES = {
-  "ANIML_API_URL": "animl-api-url-{}".format(os.environ["STAGE"]),
-  "ARCHIVE_BUCKET": "animl-images-archive-bucket-{}".format(os.environ["STAGE"]),
-  "PROD_BUCKET": "animl-images-prod-bucket-{}".format(os.environ["STAGE"]),
-  "DEADLETTER_BUCKET": "animl-images-dead-letter-bucket-{}".format(os.environ["STAGE"]),
+    "ANIML_API_URL": "animl-api-url-{}".format(os.environ["STAGE"]),
+    "ARCHIVE_BUCKET": "animl-images-archive-bucket-{}".format(os.environ["STAGE"]),
+    "PROD_BUCKET": "animl-images-prod-bucket-{}".format(os.environ["STAGE"]),
+    "DEADLETTER_BUCKET": "animl-images-dead-letter-bucket-{}".format(os.environ["STAGE"]),
 }
-QUERY = """mutation CreateImageRecord($input: CreateImageInput!){
-    createImage(input: $input) {
-        image {
-            _id
-            objectKey
+QUERY = gql("""
+    mutation CreateImageRecord($input: CreateImageInput!){
+        createImage(input: $input) {
+            image {
+                _id
+                objectKey
+            }
         }
     }
-}"""
+"""
+)
 
 s3 = boto3.client("s3")
-
-def save_to_db(md, config, query=QUERY):
-    print("Posting metadata to API: {}".format(md))
-    url = config["ANIML_API_URL"]
-    image_input = {"input": { "md": md }}
-    r = requests.post(url, json={"query": query, "variables": image_input})
-    print("Response: {}".format(r.json()))
-    print("Status code: {}".format(r.status_code))
-    return r.json()
 
 def create_thumbnail(md, config, size=THUMB_SIZE, dir=PROD_DIR_THUMB):
     print("Creating thumbnail")
@@ -60,11 +52,11 @@ def create_thumbnail(md, config, size=THUMB_SIZE, dir=PROD_DIR_THUMB):
     thumb_key = os.path.join(dir, thumb_filename)
     s3.upload_file(tmp_path_thumb, prod_bkt, thumb_key)
 
-def copy_to_dlb(r, md, config):
+def copy_to_dlb(errors, md, config):
     dl_bkt = config["DEADLETTER_BUCKET"]
     copy_source = { "Bucket": md["Bucket"], "Key": md["Key"] }
     dest_dir = "UNKNOWN_ERROR"
-    for error in r["errors"]:
+    for error in errors:
         if "extensions" in error and "code" in error["extensions"]:
             dest_dir = error["extensions"]["code"]
     md["DeadLetterKey"] = os.path.join(dest_dir, md["FileName"])
@@ -83,6 +75,24 @@ def copy_to_dest(md, config):
     print("Transferring {} to {}".format(md["FileName"], prod_bkt))
     s3.copy(copy_source, prod_bkt, md["ProdKey"])
     return md
+
+def save_image(md, config, query=QUERY):
+    print("Posting metadata to API: {}".format(md))
+    url = config["ANIML_API_URL"]
+    image_input = {"input": { "md": md }}
+    transport = RequestsHTTPTransport(
+        url, verify=True, retries=3,
+    )
+    client = Client(transport=transport, fetch_schema_from_transport=True)
+    try:
+        r = client.execute(query, variable_values=image_input)
+        print("Response: {}".format(r))
+        copy_to_dest(md, config)
+        create_thumbnail(md, config)
+    except Exception as e:
+        print("Error posting to backend: {}".format(e))
+        errors = vars(e).get("errors", [])
+        copy_to_dlb(errors, md, config)
 
 def hash(img_path):
     image = Image.open(img_path)
@@ -125,14 +135,7 @@ def process_image(md, config):
     tmp_path = download(md["Bucket"], md["Key"])
     exif_data = get_exif_data(tmp_path)
     md = enrich_meta_data(md, exif_data, config)
-    r = save_to_db(md, config)
-    if ("errors" in r or 
-        "error" in r.get("message") or 
-        r.get("data") is None):
-        copy_to_dlb(r, md, config)
-    else:
-        copy_to_dest(md, config)
-        create_thumbnail(md, config)
+    save_image(md, config)
 
 def validate(file_name):
     ext = os.path.splitext(file_name)
@@ -159,6 +162,7 @@ def getConfig(context, ssm_names=SSM_NAMES):
   max_age_in_seconds=300
 )
 def handler(event, context):
+    print('event: {}'.format(event))
     config = getConfig(context)
     for record in event["Records"]:
         md = {
