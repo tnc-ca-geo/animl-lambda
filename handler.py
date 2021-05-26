@@ -13,13 +13,11 @@ from gql.transport.requests import RequestsHTTPTransport
 import exiftool
 from lambda_cache import ssm
 
-
-PROD_DIR_IMGS = "original"
 EXIFTOOL_PATH = "{}/exiftool".format(os.environ["LAMBDA_TASK_ROOT"])
 SUPPORTED_FILE_TYPES = [".jpg", ".png"]
-# THUMB_SIZE = (120, 120)
 IMG_SIZES = {
-  'medium': (900, 900),
+  'original': None,
+  'medium': (1200, 1200),
   'small': (120, 120)
 }
 SSM_NAMES = {
@@ -33,7 +31,6 @@ QUERY = gql("""
         createImage(input: $input) {
             image {
                 _id
-                objectKey
             }
         }
     }
@@ -42,19 +39,12 @@ QUERY = gql("""
 
 s3 = boto3.client("s3")
 
-def resize(md, config, sizes=IMG_SIZES):
-    print("Resizing image")
-    prod_bkt = config["PROD_BUCKET"]
-    file_ext = os.path.splitext(md["FileName"])
-    for size, dims in sizes.items():
-        filename = "{}-{}{}".format(md["Hash"], size, file_ext[1])
-        tmp_path = os.path.join("/tmp", filename)
-        with Image.open(md["SourceFile"]) as image:
-            image.thumbnail(dims)
-            image.save(tmp_path)
-            print("Transferring thumbnail {} to {}".format(filename, prod_bkt))
-            thumb_key = os.path.join(size, filename)
-            s3.upload_file(tmp_path, prod_bkt, thumb_key)
+def resize(md, filename, dims):
+    tmp_path = os.path.join("/tmp", filename)
+    with Image.open(md["SourceFile"]) as image:
+        image.thumbnail(dims)
+        image.save(tmp_path)
+    return tmp_path
 
 def copy_to_dlb(errors, md, config):
     dl_bkt = config["DEADLETTER_BUCKET"]
@@ -63,22 +53,34 @@ def copy_to_dlb(errors, md, config):
     for error in errors:
         if "extensions" in error and "code" in error["extensions"]:
             dest_dir = error["extensions"]["code"]
-    md["DeadLetterKey"] = os.path.join(dest_dir, md["FileName"])
-    # transfer to dead letter bucket
-    print("Transferring {} to {}".format(md["FileName"], dl_bkt))
-    s3.copy(copy_source, dl_bkt, md["DeadLetterKey"])
+    dlb_key = os.path.join(dest_dir, md["FileName"])
+    print("Transferring {} to {}".format(dlb_key, dl_bkt))
+    s3.copy(copy_source, dl_bkt, dlb_key)
 
-def copy_to_dest(md, config):
-    archive_bkt = config["ARCHIVE_BUCKET"]
-    prod_bkt = config["PROD_BUCKET"]
+def copy_to_archive(md):
+    archive_bkt = md["ArchiveBucket"]
     copy_source = { "Bucket": md["Bucket"], "Key": md["Key"] }
-    # transfer to archive
+    file_base, file_ext = os.path.splitext(md["FileName"])
+    archive_filename = file_base + "_" + md["Hash"] + file_ext
     print("Transferring {} to {}".format(md["FileName"], archive_bkt))
-    s3.copy(copy_source, archive_bkt, md["ArchiveKey"])
-    # transfer to prod
-    print("Transferring {} to {}".format(md["FileName"], prod_bkt))
-    s3.copy(copy_source, prod_bkt, md["ProdKey"])
+    s3.copy(copy_source, archive_bkt, archive_filename)
     return md
+
+def copy_to_prod(md, sizes=IMG_SIZES):
+    prod_bkt = md["ProdBucket"]
+    for size, dims in sizes.items():
+        # create filename and key
+        filename = "{}-{}.{}".format(md["Hash"], size, md["FileTypeExtension"])
+        prod_key = os.path.join(size, filename)
+        print("Transferring {} to {}".format(prod_key, prod_bkt))
+        if dims is not None:
+            # resize locally then upload to s3
+            tmp_path = resize(md, filename, dims)
+            s3.upload_file(tmp_path, prod_bkt, prod_key)
+        else:
+            # copy original image directly over from staging bucket 
+            copy_source = { "Bucket": md["Bucket"], "Key": md["Key"] }
+            s3.copy(copy_source, prod_bkt, prod_key)
 
 def save_image(md, config, query=QUERY):
     print("Posting metadata to API: {}".format(md))
@@ -91,10 +93,10 @@ def save_image(md, config, query=QUERY):
     try:
         r = client.execute(query, variable_values=image_input)
         print("Response: {}".format(r))
-        copy_to_dest(md, config)
-        resize(md, config)
+        copy_to_prod(md)
+        copy_to_archive(md)
     except Exception as e:
-        print("Error posting to backend: {}".format(e))
+        print("Error saving image: {}".format(e))
         errors = vars(e).get("errors", [])
         copy_to_dlb(errors, md, config)
 
@@ -106,13 +108,12 @@ def hash(img_path):
 def enrich_meta_data(md, exif_data, config):
     exif_data.update(md)
     md = exif_data
-    md["Hash"] = hash(md["SourceFile"])
-    file_base, file_ext = os.path.splitext(md["FileName"])
-    archive_filename = file_base + "_" + md["Hash"] + file_ext
+    file_ext = os.path.splitext(md["FileName"])[1].lower().replace(".", "")
+    md["FileTypeExtension"] = md["FileTypeExtension"].lower() or file_ext
     md["SerialNumber"] = md.get("SerialNumber") or "unknown"
-    md["ArchiveKey"] = os.path.join(md["SerialNumber"], archive_filename)
-    md["ProdKey"] = os.path.join(PROD_DIR_IMGS, md["Hash"] + file_ext)
+    md["ArchiveBucket"] = config["ARCHIVE_BUCKET"]
     md["ProdBucket"] = config["PROD_BUCKET"]
+    md["Hash"] = hash(md["SourceFile"])
     return md
 
 def get_exif_data(img_path):
