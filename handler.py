@@ -17,7 +17,7 @@ EXIFTOOL_PATH = "{}/exiftool".format(os.environ["LAMBDA_TASK_ROOT"])
 SUPPORTED_FILE_TYPES = [".jpg", ".png"]
 IMG_SIZES = {
   'original': None,
-  'medium': (1200, 1200),
+  'medium': (940, 940),
   'small': (120, 120)
 }
 SSM_NAMES = {
