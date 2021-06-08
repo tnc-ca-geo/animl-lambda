@@ -84,8 +84,11 @@ def save_image(md, config, query=QUERY):
     print("Posting metadata to API: {}".format(md))
     url = config["ANIML_API_URL"]
     image_input = {"input": { "md": md }}
+    headers = {
+        "x-api-key": os.environ["APIKEY"]
+    }
     transport = RequestsHTTPTransport(
-        url, verify=True, retries=3,
+        url, verify=True, retries=3, headers=headers
     )
     client = Client(transport=transport, fetch_schema_from_transport=True)
     try:
