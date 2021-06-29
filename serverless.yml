@@ -31,7 +31,8 @@ provider:
     - 'arn:aws:iam::aws:policy/AWSLambdaExecute'
   environment:
     STAGE: ${opt:stage, self:provider.stage, 'dev'}
-    ANIML_API_URL: https://qxtg8jjpqf.execute-api.us-west-2.amazonaws.com/dev/
+    ANIML_API_URL: https://qxtg8jjpqf.execute-api.us-west-2.amazonaws.com/dev/internal
+    APIKEY: '{{resolve:secretsmanager:api-key:SecretString:apikey}}'
 
 functions:
   IngestImage:
